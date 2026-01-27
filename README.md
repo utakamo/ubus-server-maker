@@ -1,4 +1,4 @@
-# OpenWrt UBUS Server Maker
+# OpenWrt UBUS Server Maker (Beta)
 
 ![Electron](https://img.shields.io/badge/Electron-32.x-blue) ![OpenWrt](https://img.shields.io/badge/OpenWrt-Compatible-blueviolet) ![Gemini AI](https://img.shields.io/badge/AI-Gemini_%2F_Flash-orange) ![License](https://img.shields.io/badge/License-MIT-green)
 
