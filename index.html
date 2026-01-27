@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UBUS Server Maker</title>
+    
+    <!-- CodeMirror CSS -->
+    <link rel="stylesheet" href="assets/libs/codemirror/5.65.16/codemirror.min.css">
+    <link rel="stylesheet" href="assets/libs/codemirror/5.65.16/monokai.min.css">
+    
+    <!-- xterm.js CSS -->
+    <link rel="stylesheet" href="assets/libs/xterm@5.3.0/css/xterm.min.css">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="app-header">
+        <div class="header-container">
+            <h1>UBUS Server Maker</h1>
+            <div class="header-actions">
+                <button id="toggle-sidebar-btn" class="btn secondary small" title="Toggle Sidebar">⬅️</button>
+                <button id="toggle-preview-btn" class="btn secondary small" title="Toggle Preview">➡️</button>
+                <div class="divider-vertical"></div>
+                <button id="show-preview-btn" class="btn primary header-tab active">Script Preview</button>
+                <div class="divider-vertical"></div>
+                <button id="toggle-gemini-btn" class="btn primary header-tab">Gemini Chat</button>
+                <div class="divider-vertical"></div>
+                <button id="reset-btn" class="btn secondary small">Reset Data</button>
+                <button id="download-btn" class="btn primary">Download Script</button>
+                <button id="download-acl-btn" class="btn success">Download ACL</button>
+            </div>
+        </div>
+    </header>
+
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <h2>Settings</h2>
+            </div>
+            <div class="sidebar-content">
+                <div class="form-group-sidebar">
+                    <label for="object-name">Script / Object Name</label>
+                    <input type="text" id="object-name" value="my_server" placeholder="e.g. my_server">
+                </div>
+                
+                <hr class="sidebar-divider">
+
+                <div class="form-group-sidebar">
+                    <label for="acl-name">ACL Group Name</label>
+                    <input type="text" id="acl-name" value="sample" placeholder="e.g. sample">
+                </div>
+                 <div class="form-group-sidebar">
+                    <label for="acl-desc">ACL Description</label>
+                    <input type="text" id="acl-desc" value="Sample ubus method" placeholder="Description">
+                </div>
+
+                <hr class="sidebar-divider">
+                
+                <div class="sidebar-subheader">
+                    <h3>Deployment (SCP)</h3>
+                </div>
+                <div class="form-group-sidebar">
+                    <label for="deploy-host">Host IP</label>
+                    <input type="text" id="deploy-host" placeholder="192.168.1.1">
+                </div>
+                <div class="form-group-sidebar">
+                    <label for="deploy-user">Username</label>
+                    <input type="text" id="deploy-user" placeholder="root">
+                </div>
+                <div class="form-group-sidebar">
+                    <label for="deploy-pass">Password</label>
+                    <input type="password" id="deploy-pass" placeholder="Password">
+                </div>
+                <div class="form-group-sidebar">
+                    <label for="deploy-script-path">Script Path</label>
+                    <input type="text" id="deploy-script-path" placeholder="/usr/libexec/rpcd/">
+                </div>
+                <div class="form-group-sidebar">
+                    <label for="deploy-acl-path">ACL Path</label>
+                    <input type="text" id="deploy-acl-path" placeholder="/usr/share/rpcd/acl.d/">
+                </div>
+                <button id="deploy-btn" class="btn primary" style="width:100%; margin-top:5px;">Upload</button>
+
+                <div class="sidebar-subheader">
+                    <h3>Methods</h3>
+                    <button id="add-method-btn" class="btn small">+ Add</button>
+                </div>
+                <ul id="method-list" class="nav-list"></ul>
+            </div>
+        </aside>
+
+        <!-- Main Editor -->
+        <main class="editor-area">
+            <div class="main-content-wrapper">
+                <!-- Main Tabs -->
+                <div class="tabs main-tabs">
+                    <button class="tab-btn active" data-target="editor-view">Method Editor</button>
+                    <button class="tab-btn" data-target="ssh-view">SSH Console</button>
+                </div>
+
+                <!-- Editor View -->
+                <div id="editor-view" class="view-content active">
+                    <div id="editor-empty" class="empty-state">
+                        <p>Select or add a method to edit.</p>
+                    </div>
+                    <div id="editor-content" class="editor-content hidden">
+                        <div class="editor-header-row">
+                            <h2>Edit Method</h2>
+                            <div class="toggle-container">
+                                <label class="switch">
+                                    <input type="checkbox" id="mode-toggle" checked>
+                                    <span class="slider round"></span>
+                                </label>
+                                <span class="toggle-label">Auto-JSON Wrapper</span>
+                            </div>
+                        </div>
+                        
+                        <div class="form-row">
+                            <div class="form-group flex-grow">
+                                <label for="method-name">Method Name</label>
+                                <input type="text" id="method-name" placeholder="e.g., getData">
+                                <div id="method-name-error" class="error-msg hidden"></div>
+                            </div>
+                            <div class="form-group">
+                                <label>ACL Permission</label>
+                                <div class="radio-group">
+                                    <label><input type="radio" name="acl-perm" value="read"> Read</label>
+                                    <label><input type="radio" name="acl-perm" value="write"> Write</label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="arguments-section">
+                            <div class="section-header">
+                                <h3>Arguments</h3>
+                                <button id="add-arg-btn" class="btn small secondary">+ Add Arg</button>
+                            </div>
+                            <div id="args-container" class="args-list"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="method-code">Function Body</label>
+                            <div class="snippet-toolbar">
+                                <button class="btn xs secondary snippet-btn" data-snippet='local uci = require("luci.model.uci").cursor()'>UCI</button>
+                                <button class="btn xs secondary snippet-btn" data-snippet='local fs = require("nixio.fs")'>FS</button>
+                                <button class="btn xs secondary snippet-btn" data-snippet='local sys = require("luci.sys")'>Sys</button>
+                                <button class="btn xs secondary snippet-btn" data-snippet='local util = require("luci.util")'>Util</button>
+                                <button class="btn xs secondary snippet-btn" data-snippet='local ubus = require("ubus").connect()'>Ubus</button>
+                            </div>
+                            <div id="code-help-auto" class="help-text info-box">
+                                <strong>Simplified Mode:</strong> Variable <code>response</code> is pre-defined.
+                            </div>
+                            <div id="code-help-manual" class="help-text hidden">
+                                <strong>Manual Mode:</strong> Full control.
+                            </div>
+                            <!-- Textarea replaced by CodeMirror -->
+                            <textarea id="method-code"></textarea>
+                        </div>
+
+                        <div class="danger-zone">
+                            <button id="delete-method-btn" class="btn danger">Delete Method</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SSH Console View -->
+                <div id="ssh-view" class="view-content hidden" style="height: 100%; flex-direction: column;">
+                    <div class="ssh-toolbar" style="padding-bottom: 10px; display: flex; gap: 10px;">
+                        <button id="ssh-connect-btn" class="btn primary small">Connect to Shell</button>
+                        <span id="ssh-status" style="font-size: 12px; align-self: center; margin-left: auto;">Not Connected</span>
+                    </div>
+                    <div id="terminal-container" style="flex: 1; background: #000; padding: 5px; border-radius: 4px; overflow: hidden;"></div>
+                </div>
+            <!-- Gemini Chat Side Panel -->
+            <!-- Removed (Moved to Preview Area) -->
+        </main>
+
+        <!-- Preview Area -->
+        <section class="preview-area">
+            <!-- Normal Preview Wrapper -->
+            <div id="preview-content-wrapper" style="display: flex; flex-direction: column; height: 100%;">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="lua">Lua Script</button>
+                    <button class="tab-btn" data-tab="acl">ACL (JSON)</button>
+                </div>
+
+                <div id="tab-content-lua" class="tab-content active">
+                    <div class="preview-header"><h3>Test Command</h3></div>
+                    <div class="command-box">
+                        <code id="test-command"></code>
+                        <button id="copy-cmd-btn" class="btn xs secondary">Copy</button>
+                    </div>
+                    <div class="preview-header"><h3 id="preview-filename"></h3></div>
+                    <pre id="lua-preview"><code></code></pre>
+                </div>
+
+                <div id="tab-content-acl" class="tab-content hidden">
+                    <div class="preview-header"><h3 id="preview-aclname"></h3></div>
+                    <pre id="acl-preview"><code></code></pre>
+                </div>
+            </div>
+
+            <!-- Gemini Chat Overlay -->
+            <div id="gemini-overlay" class="gemini-overlay hidden">
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <h3>Gemini Assistant</h3>
+                        <div style="display: flex; gap: 5px;">
+                            <button id="gemini-history-btn" class="btn small secondary">History</button>
+                            <button id="gemini-settings-btn" class="btn small secondary">Settings</button>
+                        </div>
+                    </div>
+                    
+                    <!-- Settings Panel -->
+                    <div id="gemini-settings-panel" class="settings-panel hidden" style="position: absolute; top: 50px; left: 10px; right: 10px; z-index: 100;">
+                        <div class="form-group">
+                            <label>API Key</label>
+                            <input type="password" id="gemini-api-key" placeholder="Enter Gemini API Key">
+                        </div>
+                        <div class="form-group">
+                            <label>Model</label>
+                            <select id="gemini-model">
+                                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+                                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>System Message</label>
+                            <textarea id="gemini-system-message" rows="6" placeholder="Instructions for the AI..." style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; resize: vertical; font-family: sans-serif; font-size: 13px;"></textarea>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Enabled Tools</label>
+                            <div class="tools-list">
+                                <div class="tool-setting-item">
+                                    <div class="tool-setting-info">
+                                        <div class="tool-setting-name">Update Editor Code</div>
+                                        <div class="tool-setting-desc">Updates the editor with Lua code generated by AI.</div>
+                                    </div>
+                                    <label class="switch mini">
+                                        <input type="checkbox" id="tool-update-code" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="tool-setting-item">
+                                    <div class="tool-setting-info">
+                                        <div class="tool-setting-name">Deploy to Router</div>
+                                        <div class="tool-setting-desc">Uploads script via SCP and restarts RPCD.</div>
+                                    </div>
+                                    <label class="switch mini">
+                                        <input type="checkbox" id="tool-deploy" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="tool-setting-item">
+                                    <div class="tool-setting-info">
+                                        <div class="tool-setting-name">Add New Method</div>
+                                        <div class="tool-setting-desc">Automatically adds a new method to the project.</div>
+                                    </div>
+                                    <label class="switch mini">
+                                        <input type="checkbox" id="tool-add-method" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="tool-setting-item">
+                                    <div class="tool-setting-info">
+                                        <div class="tool-setting-name">Set Object Name</div>
+                                        <div class="tool-setting-desc">Changes the UBUS object namespace.</div>
+                                    </div>
+                                    <label class="switch mini">
+                                        <input type="checkbox" id="tool-set-objname" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="tool-setting-item">
+                                    <div class="tool-setting-info">
+                                        <div class="tool-setting-name">Rename Method</div>
+                                        <div class="tool-setting-desc">Renames an existing UBUS method.</div>
+                                    </div>
+                                    <label class="switch mini">
+                                        <input type="checkbox" id="tool-rename-method" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                                <div class="tool-setting-item">
+                                    <div class="tool-setting-info">
+                                        <div class="tool-setting-name">Connect SSH</div>
+                                        <div class="tool-setting-desc">Connects to the router's SSH console.</div>
+                                    </div>
+                                    <label class="switch mini">
+                                        <input type="checkbox" id="tool-connect-ssh" checked>
+                                        <span class="slider round"></span>
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+
+                        <button id="save-gemini-config-btn" class="btn primary small">Save</button>
+                    </div>
+
+                    <div class="chat-body" style="display: flex; flex: 1; overflow: hidden; position: relative; flex-direction: column;">
+                        <!-- History View (Toggleable) -->
+                        <div id="chat-history-view" class="hidden" style="flex: 1; display: flex; flex-direction: column; background: #fff; position: absolute; top:0; bottom:0; left:0; right:0; z-index: 10;">
+                            <div style="padding: 15px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center; background: #fafafa;">
+                                <h3 style="margin:0; font-size:16px;">Chat History</h3>
+                            </div>
+                            <div id="session-list" class="session-list" style="flex: 1; overflow-y: auto;"></div>
+                            <div style="padding: 10px; border-top: 1px solid #eee; text-align: center; background: #fafafa;">
+                                <button id="back-to-chat-btn" class="btn secondary small full-width">Back to Chat</button>
+                            </div>
+                        </div>
+
+                        <!-- Main Chat View -->
+                        <div id="chat-main-view" class="chat-main" style="flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100%;">
+                            <div id="chat-history" class="chat-history" style="padding: 10px;"></div>
+                            <div class="chat-input-area">
+                                <textarea id="chat-input" placeholder="Ask Gemini... (Ctrl+Enter to send)"></textarea>
+                                <div style="display: flex; flex-direction: column; gap: 5px;">
+                                    <button id="new-chat-btn" class="btn secondary small" title="Clear current chat and start new">New Chat</button>
+                                    <button id="send-chat-btn" class="btn primary">Send</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Custom Confirm Modal -->
+    <div id="confirm-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h3 class="modal-title">Confirmation</h3>
+            <p id="confirm-message" class="modal-message"></p>
+            <div class="modal-actions">
+                <button id="confirm-cancel-btn" class="btn secondary">Cancel</button>
+                <button id="confirm-ok-btn" class="btn primary">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CodeMirror JS -->
+    <script src="assets/libs/codemirror/5.65.16/codemirror.min.js"></script>
+    <script src="assets/libs/codemirror/5.65.16/mode/lua/lua.min.js"></script>
+    
+    <!-- xterm.js JS -->
+    <script src="assets/libs/xterm@5.3.0/lib/xterm.min.js"></script>
+    <script src="assets/libs/xterm-addon-fit@0.8.0/lib/xterm-addon-fit.min.js"></script>
+    <!-- Marked.js for Markdown Rendering -->
+    <script src="assets/libs/marked/marked.min.js"></script>
+
+    <script src="script.js"></script>
+</body>
+</html>

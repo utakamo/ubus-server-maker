@@ -1,0 +1,60 @@
+{
+  "name": "ubus-server-maker",
+  "version": "1.0.0",
+  "description": "A browser-based tool to generate Lua server scripts and ACL configurations for OpenWrt `ubus` (OpenWrt micro bus architecture).",
+  "main": "main.js",
+  "homepage": "https://github.com/kamo/ubus-server-maker",
+  "author": {
+    "name": "Kamo",
+    "email": "kamo@example.com"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder",
+    "pack": "electron-builder --dir",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "build": {
+    "appId": "com.kamo.ubus-server-maker",
+    "productName": "UBUS-Server-Maker",
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "maintainer": "Kamo <kamo@example.com>",
+      "category": "Development"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "verifyUpdateCodeSignature": false,
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "files": [
+      "**/*",
+      "!dist/*"
+    ]
+  },
+  "keywords": [],
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "electron": "^32.3.3",
+    "electron-builder": "^26.4.0"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "electron-store": "^8.1.0",
+    "node-ssh": "^12.0.0",
+    "ssh2": "^1.17.0"
+  }
+}
