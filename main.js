@@ -402,3 +402,22 @@ ipcMain.on('ssh-disconnect', () => {
         sshStream = null;
     }
 });
+
+ipcMain.handle('send-rpc-request', async (event, { url, data }) => {
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP Error: ${response.status} ${response.statusText}`);
+        }
+
+        const json = await response.json();
+        return { success: true, data: json };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});

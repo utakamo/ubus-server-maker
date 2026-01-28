@@ -309,11 +309,19 @@ function init() {
         btn.addEventListener('click', () => {
             btn.blur(); // Remove focus from tab button
             mainTabBtns.forEach(b => b.classList.remove('active'));
-            mainViews.forEach(v => v.classList.remove('active'));
+            
+            // Hide all views
+            mainViews.forEach(v => {
+                v.classList.remove('active');
+                v.classList.add('hidden');
+            });
             
             btn.classList.add('active');
             const targetId = btn.getAttribute('data-target');
-            document.getElementById(targetId).classList.add('active');
+            const targetView = document.getElementById(targetId);
+            
+            targetView.classList.remove('hidden');
+            targetView.classList.add('active');
             
             // Focus Management
             if (targetId === 'editor-view') {
@@ -1341,6 +1349,159 @@ if (window.electronAPI) {
         if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
             e.preventDefault();
             if(!isSending) sendMessage(chatInput.value);
+        }
+    });
+}
+
+// --- RPC Client Logic ---
+let rpcSessionId = "00000000000000000000000000000000"; // Default invalid session
+
+const rpcUrlInput = document.getElementById('rpc-url');
+const rpcLoginBtn = document.getElementById('rpc-login-btn');
+const rpcSessionStatus = document.getElementById('rpc-session-status');
+const rpcAutofillBtn = document.getElementById('rpc-autofill-btn');
+const rpcRequestBody = document.getElementById('rpc-request-body');
+const rpcSendBtn = document.getElementById('rpc-send-btn');
+const rpcResponse = document.getElementById('rpc-response');
+
+if (window.electronAPI) {
+    
+    // Auto-set URL if host changes
+    deployHostInput.addEventListener('input', () => {
+        if (!rpcUrlInput.value && deployHostInput.value) {
+            rpcUrlInput.value = `http://${deployHostInput.value}/ubus`;
+        }
+    });
+
+    rpcLoginBtn.addEventListener('click', async () => {
+        const host = deployHostInput.value;
+        const user = deployUserInput.value;
+        const pass = deployPassInput.value;
+        let url = rpcUrlInput.value;
+
+        if (!url) {
+            if (host) {
+                url = `http://${host}/ubus`;
+                rpcUrlInput.value = url;
+            } else {
+                showToast("Please enter Target URL or set Host IP in Settings.", "error");
+                return;
+            }
+        }
+
+        if (!user || !pass) {
+            showToast("Username and Password required in Settings sidebar.", "error");
+            return;
+        }
+
+        rpcLoginBtn.textContent = "Logging in...";
+        rpcLoginBtn.disabled = true;
+
+        const loginRequest = {
+            jsonrpc: "2.0",
+            id: 1,
+            method: "call",
+            params: [
+                "00000000000000000000000000000000",
+                "session",
+                "login",
+                { username: user, password: pass }
+            ]
+        };
+
+        try {
+            const result = await window.electronAPI.sendRpcRequest(url, loginRequest);
+            
+            if (result.success && result.data && result.data.result && result.data.result[1]) {
+                const sessionData = result.data.result[1];
+                if (sessionData.ubus_rpc_session) {
+                    rpcSessionId = sessionData.ubus_rpc_session;
+                    
+                    const indicator = rpcSessionStatus.querySelector('.status-indicator');
+                    if(indicator) indicator.style.background = '#4caf50';
+                    rpcSessionStatus.innerHTML = `<span class="status-indicator" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#4caf50; margin-right:5px;"></span> Session: Active (${rpcSessionId.substring(0, 8)}...)`;
+                    
+                    showToast("Login Successful!", "success");
+                } else {
+                    throw new Error("No session ID in response");
+                }
+            } else {
+                let err = "Login Failed";
+                if(result.data && result.data.error) err += ": " + JSON.stringify(result.data.error);
+                throw new Error(err);
+            }
+        } catch (e) {
+            showToast(e.message, "error");
+            const indicator = rpcSessionStatus.querySelector('.status-indicator');
+            if(indicator) indicator.style.background = '#f44336';
+            rpcSessionStatus.innerHTML = `<span class="status-indicator" style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#f44336; margin-right:5px;"></span> Session: Login Failed`;
+        } finally {
+            rpcLoginBtn.textContent = "Login";
+            rpcLoginBtn.disabled = false;
+        }
+    });
+
+    rpcAutofillBtn.addEventListener('click', () => {
+        const method = methods.find(m => m.id === selectedId);
+        if (!method) {
+            showToast("No method selected.", "error");
+            return;
+        }
+
+        // Construct dummy args
+        const args = {};
+        method.args.forEach(a => {
+            args[a.name] = a.type === 'number' ? 123 : a.type === 'boolean' ? true : a.type === 'table' ? {} : "value";
+        });
+
+        const req = {
+            jsonrpc: "2.0",
+            id: Date.now(),
+            method: "call",
+            params: [
+                rpcSessionId,
+                objectName,
+                method.name,
+                args
+            ]
+        };
+
+        rpcRequestBody.value = JSON.stringify(req, null, 4);
+    });
+
+    rpcSendBtn.addEventListener('click', async () => {
+        const url = rpcUrlInput.value;
+        if (!url) {
+            showToast("Target URL is required.", "error");
+            return;
+        }
+
+        let data;
+        try {
+            data = JSON.parse(rpcRequestBody.value);
+        } catch (e) {
+            showToast("Invalid JSON in Request Body.", "error");
+            return;
+        }
+
+        rpcSendBtn.textContent = "Sending...";
+        rpcSendBtn.disabled = true;
+        rpcResponse.textContent = "Waiting...";
+
+        try {
+            const result = await window.electronAPI.sendRpcRequest(url, data);
+            if (result.success) {
+                rpcResponse.textContent = JSON.stringify(result.data, null, 4);
+                // Check for session expiry error (code 6 or similar in ubus, but JSON-RPC might return different)
+                // Ubus error code 6 is "Permission denied" which often means invalid session
+            } else {
+                rpcResponse.textContent = "Error: " + result.error;
+            }
+        } catch (e) {
+            rpcResponse.textContent = "Exception: " + e.message;
+        } finally {
+            rpcSendBtn.textContent = "Send Request";
+            rpcSendBtn.disabled = false;
         }
     });
 }

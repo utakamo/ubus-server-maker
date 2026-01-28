@@ -13,9 +13,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // SSH Terminal
     connectSSH: (config) => ipcRenderer.invoke('ssh-connect', config),
     sendSSHInput: (data) => ipcRenderer.send('ssh-input', data),
-    resizeSSH: (size) => ipcRenderer.send('ssh-resize', size),
+    resizeSSH: (dims) => ipcRenderer.send('ssh-resize', dims),
     
-    onSSHData: (callback) => ipcRenderer.on('ssh-data', (event, data) => callback(data)),
+    // RPC
+    sendRpcRequest: (url, data) => ipcRenderer.invoke('send-rpc-request', { url, data }),
+
+    // Listeners
+    onSSHData: (callback) => ipcRenderer.on('ssh-data', (_event, value) => callback(value)),
     onSSHStatus: (callback) => ipcRenderer.on('ssh-status', (event, status) => callback(status)),
     onSSHError: (callback) => ipcRenderer.on('ssh-error', (event, err) => callback(err))
 });
